@@ -19,11 +19,6 @@ def get_bbox(uv):
     ]
 
 def get_gt(sid, cid, fid):
-     # load calibration
-    # load image
-    image_file = os.path.join(args.hanco_path, f'rgb/{sid:04d}/cam{cid}/{fid:08d}.jpg')
-    img = cv2.imread(image_file)[:, :, ::-1]
-
     # load keypoints
     kp_data_file = os.path.join(args.hanco_path, f'xyz/{sid:04d}/{fid:08d}.json')
     with open(kp_data_file, 'r') as fi:
@@ -63,12 +58,14 @@ def convert_samples(args, set_type="training"):
     meta_file = os.path.join(args.hanco_path, 'meta.json')
     with open(meta_file, 'r') as fi: 
         meta_data = json.load(fi)
-
+    
     for i in range(num_sequences):
         seq_folder = '%04d' % i
         if (not os.path.isdir(os.path.join(image_path, seq_folder))):
             continue
-
+        print(f"Sequence: {i}")
+        if (idx >= 250000):
+            break
         for j in range(num_cameras):
             cam_folder = "cam" + ("%01d" % j)
             image_folder = os.path.join(image_path, seq_folder, cam_folder)
@@ -85,7 +82,7 @@ def convert_samples(args, set_type="training"):
                     "id": idx,
                     "width": 224,
                     "height": 224,
-                    "file_name": f,
+                    "file_name": os.path.join(seq_folder, cam_folder, basename),
                     "camera_param": {
                         "focal": [K[0][0], K[1][1]],
                         "princpt": [K[0][2], K[1][2]]
