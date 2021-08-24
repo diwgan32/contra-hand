@@ -39,8 +39,17 @@ def get_gt(sid, cid, fid):
 
     return K, kp_uv, kp_xyz_cam_m
 
+def reproject_to_3d(im_coords, K, z):
+    im_coords = np.stack([im_coords[:,0], im_coords[:,1]],axis=1)
+    im_coords = np.hstack((im_coords, np.ones((im_coords.shape[0],1))))
+    projected = np.dot(np.linalg.inv(K), im_coords.T).T
+    projected[:, 0] *= z
+    projected[:, 1] *= z
+    projected[:, 2] *= z
+    return projected
+
 def convert_samples(args, set_type="training"):
-    image_path = os.path.join(args.hanco_path, "rgb_merged")
+    image_path = os.path.join(args.hanco_path, "rgb")
     num_sequences = 1518
     num_cameras = 8
 
@@ -61,11 +70,11 @@ def convert_samples(args, set_type="training"):
     
     for i in range(num_sequences):
         seq_folder = '%04d' % i
+
         if (not os.path.isdir(os.path.join(image_path, seq_folder))):
+            print(os.path.join(image_path, seq_folder))
             continue
         print(f"Sequence: {i}")
-        if (idx >= 250000):
-            break
         for j in range(num_cameras):
             cam_folder = "cam" + ("%01d" % j)
             image_folder = os.path.join(image_path, seq_folder, cam_folder)
@@ -73,16 +82,32 @@ def convert_samples(args, set_type="training"):
             for f in files:
                 basename = os.path.basename(f)
                 fid = int(basename.split(".")[0])
-                if (not meta_data['is_train'][i][fid]):
-                    print("Skipping because not train")
+                
+                if (set_type == "evaluation"):
+                    if (meta_data['is_train'][i][fid]):
+                        print("Skipping because train")
+                        continue
+                    if (not meta_data["is_valid"][i][fid]):
+                        continue    
+                if (set_type == "training"):
+                    if (not meta_data["is_train"][i][fid]):
+                        print("Skipping because not train")
+                        continue
+                    if (not meta_data["is_valid"][i][fid]):
+                        continue
+                try:
+                    K, uv, xyz_camera = get_gt(i, j, fid)
+                except:
+                    print("Could not open gt")
                     continue
-                K, uv, xyz_camera = get_gt(i, j, fid)
-
+                # Seperately I resized hanco to 256x256 so this is necessary
+                uv *= (float(256)/224)
+                xyz_camera = reproject_to_3d(uv, K, xyz_camera[:, 2])
                 output["images"].append({
                     "id": idx,
-                    "width": 224,
-                    "height": 224,
-                    "file_name": os.path.join(seq_folder, cam_folder, basename),
+                    "width": 256,
+                    "height": 256,
+                    "file_name": os.path.join(args.hanco_path, "rgb", seq_folder, cam_folder, basename),
                     "camera_param": {
                         "focal": [K[0][0], K[1][1]],
                         "princpt": [K[0][2], K[1][2]]
@@ -114,4 +139,4 @@ if __name__ == '__main__':
     assert os.path.isdir(args.hanco_path), 'Path to HanCo doesnt seem to be a directory.'
 
 
-    convert_samples(args)
+    convert_samples(args, "evaluation")
