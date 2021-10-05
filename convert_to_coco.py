@@ -11,8 +11,8 @@ def get_bbox(uv):
     x = min(uv[:, 0]) - 10
     y = min(uv[:, 1]) - 10
 
-    x_max = min(max(uv[:, 0]) + 10, 224)
-    y_max = min(max(uv[:, 1]) + 10, 224)
+    x_max = min(max(uv[:, 0]) + 10, 256)
+    y_max = min(max(uv[:, 1]) + 10, 256)
 
     return [
         max(0, x), max(0, y), x_max - x, y_max - y
@@ -38,6 +38,20 @@ def get_gt(sid, cid, fid):
     kp_uv = kp_uv[:, :2] / kp_uv[:, -1:]
 
     return K, kp_uv, kp_xyz_cam_m
+
+def left_or_right(joint_2d, joint_3d, side):
+    joint_2d_aug = np.zeros((42, 2))
+    joint_3d_aug = np.zeros((42, 3))
+    valid = np.zeros(42)
+    if (side == "right"):
+        joint_2d_aug[0:21, :] = joint_2d
+        joint_3d_aug[0:21, :] = joint_3d
+        valid[:21] = np.ones(21)
+    if (side == "left"):
+        joint_2d_aug[21:42, :] = joint_2d
+        joint_3d_aug[21:42, :] = joint_3d
+        valid[21:42] = np.ones(21)
+    return joint_2d_aug, joint_3d_aug, valid
 
 def reproject_to_3d(im_coords, K, z):
     im_coords = np.stack([im_coords[:,0], im_coords[:,1]],axis=1)
@@ -103,6 +117,7 @@ def convert_samples(args, set_type="training"):
                 # Seperately I resized hanco to 256x256 so this is necessary
                 uv *= (float(256)/224)
                 xyz_camera = reproject_to_3d(uv, K, xyz_camera[:, 2])
+                joint_2d_aug, joint_3d_aug, valid = left_or_right(uv, xyz_camera, "right")
                 output["images"].append({
                     "id": idx,
                     "width": 256,
@@ -118,10 +133,10 @@ def convert_samples(args, set_type="training"):
                     "image_id": idx,
                     "category_id": 1,
                     "is_crowd": 0,
-                    "joint_img": uv.tolist(),
-                    "joint_valid": np.ones(21).tolist(),
+                    "joint_img": joint_2d_aug.tolist(),
+                    "joint_valid": valid.tolist(),
                     "hand_type": "right",
-                    "joint_cam": (xyz_camera * 1000).tolist(),
+                    "joint_cam": (joint_3d_aug * 1000).tolist(),
                     "bbox": get_bbox(uv)
                 })
 
